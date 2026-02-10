@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoxYZ - Voice Control</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .agents {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+      flex-wrap: wrap;
+    }
+
+    .agent {
+      flex: 1;
+      min-width: 150px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 10px;
+      text-align: center;
+      border: 2px solid transparent;
+      transition: all 0.3s ease;
+    }
+
+    .agent.active {
+      border-color: #667eea;
+      background: #eff1ff;
+    }
+
+    .agent h3 {
+      font-size: 16px;
+      margin-bottom: 5px;
+      color: #333;
+      text-transform: capitalize;
+    }
+
+    .agent .status {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+    }
+
+    input {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 16px;
+      outline: none;
+      transition: border-color 0.3s ease;
+    }
+
+    input:focus {
+      border-color: #667eea;
+    }
+
+    button {
+      padding: 15px 30px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .log {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f9f9f9;
+      border-radius: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .log h3 {
+      margin-bottom: 15px;
+      color: #333;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .log-entry {
+      padding: 10px;
+      background: white;
+      border-left: 3px solid #667eea;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+
+    .log-entry .timestamp {
+      color: #999;
+      font-size: 12px;
+    }
+
+    .log-entry .agent-name {
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .connection-status {
+      text-align: center;
+      padding: 10px;
+      background: #e8f5e9;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #2e7d32;
+    }
+
+    .connection-status.disconnected {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ VoxYZ</h1>
+    <p class="subtitle">Voice Control for AI Agents</p>
+
+    <div id="connectionStatus" class="connection-status disconnected">
+      Disconnected
+    </div>
+
+    <div class="agents" id="agents">
+      <div class="agent">
+        <h3>Gambit</h3>
+        <p class="status">Ready</p>
+      </div>
+      <div class="agent">
+        <h3>Beast</h3>
+        <p class="status">Ready</p>
+      </div>
+      <div class="agent">
+        <h3>Wolverine</h3>
+        <p class="status">Ready</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="input-group">
+        <input
+          type="text"
+          id="commandInput"
+          placeholder="Type a command (e.g., 'Beast, what's the status?')"
+        />
+        <button onclick="sendCommand()">Send</button>
+      </div>
+
+      <button onclick="testNotification()">Test Notification</button>
+    </div>
+
+    <div class="log">
+      <h3>Activity Log</h3>
+      <div id="logEntries"></div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+
+    function connect() {
+      ws = new WebSocket(`ws://${window.location.host}`);
+
+      ws.onopen = () => {
+        console.log('Connected to VoxYZ');
+        updateConnectionStatus(true);
+        addLog('system', 'Connected to VoxYZ server');
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received:', data);
+
+        if (data.type === 'route_result') {
+          addLog(data.agent, data.message);
+        } else if (data.type === 'notification') {
+          addLog(data.agent, data.message);
+          playAudio(data.audio);
+        } else if (data.type === 'audio_response') {
+          playAudio(data.audio);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        addLog('system', 'Connection error');
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected from VoxYZ');
+        updateConnectionStatus(false);
+        addLog('system', 'Disconnected from server');
+        setTimeout(connect, 3000);
+      };
+    }
+
+    function updateConnectionStatus(connected) {
+      const status = document.getElementById('connectionStatus');
+      if (connected) {
+        status.textContent = 'Connected';
+        status.classList.remove('disconnected');
+      } else {
+        status.textContent = 'Disconnected';
+        status.classList.add('disconnected');
+      }
+    }
+
+    function sendCommand() {
+      const input = document.getElementById('commandInput');
+      const command = input.value.trim();
+
+      if (!command) return;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'voice_command',
+          transcript: command
+        }));
+        addLog('user', command);
+        input.value = '';
+      } else {
+        addLog('system', 'Not connected to server');
+      }
+    }
+
+    async function testNotification() {
+      const agents = ['gambit', 'beast', 'wolverine'];
+      const agent = agents[Math.floor(Math.random() * agents.length)];
+
+      try {
+        const response = await fetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'complete',
+            agent: agent,
+            message: 'Task completed successfully',
+            timestamp: Date.now()
+          })
+        });
+
+        if (response.ok) {
+          addLog('system', `Sent test notification for ${agent}`);
+        }
+      } catch (error) {
+        console.error('Test notification error:', error);
+        addLog('system', 'Failed to send test notification');
+      }
+    }
+
+    function playAudio(base64Audio) {
+      try {
+        const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`);
+        audio.play().catch(e => console.error('Audio playback error:', e));
+      } catch (error) {
+        console.error('Audio error:', error);
+      }
+    }
+
+    function addLog(agent, message) {
+      const logEntries = document.getElementById('logEntries');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+
+      const timestamp = new Date().toLocaleTimeString();
+      entry.innerHTML = `
+        <span class="timestamp">[${timestamp}]</span>
+        <span class="agent-name">${agent}:</span>
+        ${message}
+      `;
+
+      logEntries.insertBefore(entry, logEntries.firstChild);
+
+      if (logEntries.children.length > 50) {
+        logEntries.removeChild(logEntries.lastChild);
+      }
+    }
+
+    document.getElementById('commandInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendCommand();
+      }
+    });
+
+    connect();
+  </script>
+</body>
+</html>
